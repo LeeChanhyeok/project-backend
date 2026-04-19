@@ -1,0 +1,49 @@
+name: Backend Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set lowercase owner
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image
+        run: |
+          IMAGE_NAME=ghcr.io/${OWNER_LC}/my-backend:latest
+          docker build -t $IMAGE_NAME .
+
+      - name: Push image
+        run: |
+          IMAGE_NAME=ghcr.io/${OWNER_LC}/my-backend:latest
+          docker push $IMAGE_NAME
+
+      - name: Deploy to OCI
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/deploy
+            docker compose pull backend
+            docker compose up -d backend
+            docker image prune -f
